@@ -46,7 +46,9 @@
         <div class="flex flex-col md:flex-row flex-start gap-6 flex-1 self-stretch">
             <div class="flex flex-grow bg-white p-6 rounded-md" ref="cyRef"></div>
             <div class="md:w-1/3 w-full max-w-xs bg-white rounded-md p-6">
-                <h2 class="mb-2 text-2xl">History</h2>
+                <h2 class="mb-2 text-2xl">History
+                  <span @click="renderGraph" class="cursor-pointer">🖊</span>
+                </h2>
                 <p v-if="historyError !==''"> Error fetching graph history: [[ historyError ]]</p>
                 <div class="space-y-2 overflow-y-auto" v-else>
                   <div class="bg-gray-200 hover:bg-gray-300 p-5 rounded" @click="handleGraphItemClick(k)"
@@ -73,14 +75,26 @@
           const historyError = ref("");
           
           const calcNodeWidth = (label) => {
-            // null checker added
-            // @author shepherd-06
             if (label === null || label === undefined) {
               return "50px";
             }
             return Math.max(50, label.length * 8) + "px";
           };
 
+          const renderGraph = async () => {
+            try {
+              const graphData = await postData("/get_graph_data");
+              if (Object.keys(graphData).length === 0) {
+                console.error("graphData is empty");
+                return;
+              } else {
+                await createGraph(graphData);
+              }
+            } catch (error) {
+              console.error("Error fetching graph data:", error);
+            }
+          };
+          
           /**
            * Handles form submission, fetches data, and updates the UI.
            *
@@ -92,23 +106,13 @@
             const payload = { user_input: userInput.value };
 
             try {
-              const response = await postData("/get_response_data", payload);
-              const graphData = await postData("/get_graph_data");
-              isLoading.value = false;
-              
-              // Check if graphData is an empty dictionary
-              if (Object.keys(graphData).length === 0) {
-                console.error("graphData is empty");
-                return;
-              } else {
-                await createGraph(graphData);
-              }
+              await postData("/get_response_data", payload);
+              await renderGraph();
             } catch (error) {
-              isLoading.value = false;
               console.error("Fetch Error:", error);
               showError("Fetch Error: " + error);
-              return;
             }
+            isLoading.value = false;
           }
           
           /**
@@ -221,17 +225,8 @@
            * const textColor = getTextColor("#FFFFFF"); // returns "#000000" (black)
            */
           function getTextColor(bgColor = "#000000") {
-            let brightness;
-            if (bgColor === null || bgColor === undefined) {
-              // Default brightness value when bgColor is null or undefined
-              brightness = 0;
-            } else {
-              bgColor = bgColor.replace("#", "");
-              const [r, g, b] = [0, 2, 4].map((start) =>
-                parseInt(bgColor.substr(start, 2), 16)
-              );
-              brightness = r * 0.299 + g * 0.587 + b * 0.114;
-            }
+            const [r, g, b] = [0, 2, 4].map((start) => parseInt(bgColor.replace("#", "").substr(start, 2), 16));
+            const brightness = r * 0.299 + g * 0.587 + b * 0.114;
             return brightness < 40 ? "#ffffff" : "#000000";
           }
           
@@ -267,8 +262,8 @@
               }
 
               const graph_response = await response.json();
-              if (!graph_response.neo4j) {
-                historyError.value = "no neo4j"
+              if (!graph_response.graph) {
+                historyError.value = "no graph"
                 return;
               }
               graphHistory.value = graph_response.graph_history;
@@ -299,15 +294,15 @@
           /**
            * Handles a click event on a graph history item and displays it as a graph.
            *
-           * @param {Event} event - The click event object.
+           * @param {key} key - Index of graphHistory
            *
            * @author shepherd-06
            *
            * @example
-           * handleGraphItemClick(event);
+           * handleGraphItemClick(key);
            *
            * @description
-           * This function takes a click event object and retrieves an attribute "data-item" that contains the graph history data.
+           * This function takes a click event object and retrieves data from the graph history data.
            * It then transforms this data using transformDataToGraphFormat() and displays it using createGraph().
            */
           function handleGraphItemClick(key) {
@@ -381,6 +376,7 @@
             isLoading,
             errorMessage,
             graphHistory,
+            renderGraph,
             
             handleFormSubmit,
             closeErrorMessage,
